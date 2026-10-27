@@ -1,0 +1,13 @@
+services:
+  backend:
+    image: ghcr.io/${IMAGE_REPOSITORY:?Set IMAGE_REPOSITORY}/stockroom-backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      SPRING_H2_CONSOLE_ENABLED: "false"
+  frontend:
+    image: ghcr.io/${IMAGE_REPOSITORY:?Set IMAGE_REPOSITORY}/stockroom-frontend:${IMAGE_TAG:?Set IMAGE_TAG}
+    ports:
+      - "${APP_PORT:-8081}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

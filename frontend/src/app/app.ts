@@ -20,7 +20,7 @@ type ProductInput = Omit<Product, 'id'>;
 })
 export class App implements OnInit {
   private readonly http = inject(HttpClient);
-  private readonly apiUrl = 'http://localhost:8080/api/products';
+  private readonly apiUrl = '/api/products';
 
   protected readonly products = signal<Product[]>([]);
   protected readonly loading = signal(false);

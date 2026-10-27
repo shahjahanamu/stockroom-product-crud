@@ -1,0 +1,77 @@
+name: Deploy or roll back
+on:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        required: true
+      image_tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [staging, production]
+        required: true
+      image_tag:
+        description: Full commit SHA of previously published images (use previous SHA to roll back)
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ inputs.target }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Deploy published images and smoke test
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          TARGET: ${{ inputs.target }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          IMAGE_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET" == staging || "$TARGET" == production ]]
+          [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$IMAGE_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          IMAGE_REPOSITORY="${IMAGE_REPOSITORY,,}"
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$remote" "mkdir -p stockroom-$TARGET"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/compose.yaml scripts/smoke.py "$remote:stockroom-$TARGET/"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$remote" \
+            "cd stockroom-$TARGET && IMAGE_REPOSITORY='$IMAGE_REPOSITORY' IMAGE_TAG='$IMAGE_TAG' bash -s" <<'REMOTE'
+          set -euo pipefail
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.yaml pull
+          docker compose -f compose.yaml up -d --remove-orphans --force-recreate
+          if ! python3 smoke.py http://localhost:8081; then
+            docker compose -f compose.yaml logs --tail=100
+            exit 1
+          fi
+          printf '%s\n' "$IMAGE_TAG" > deployed-sha
+          REMOTE
+      - name: Remove deployment key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

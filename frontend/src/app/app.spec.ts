@@ -27,7 +27,7 @@ describe('App', () => {
   it('should render title', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    httpTesting.expectOne('http://localhost:8080/api/products').flush([]);
+    httpTesting.expectOne('/api/products').flush([]);
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Products');
   });
