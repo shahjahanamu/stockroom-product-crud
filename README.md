@@ -144,3 +144,10 @@ For networks with a corporate/cloud proxy, Docker accepts standard `HTTP_PROXY` 
 or `docker build --secret`; keep network-specific files outside the repository.
 These secrets are mounted only during dependency installation and are not copied
 into runtime images. Normal GitHub-hosted builds need none of these overrides.
+
+## Jenkins alternative
+
+A root `Jenkinsfile` runs frontend/backend checks and Docker integration checks in
+parallel. Image publishing and staging/production deployment are opt-in parameters
+for the main branch; production requires approval. See [Jenkins setup](docs/jenkins.md)
+for the agent label, plugins, credentials, build parameters, and rollback instructions.
